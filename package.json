@@ -1,0 +1,29 @@
+{
+  "name": "postgis-mvt-server",
+  "version": "0.0.1",
+  "description": "Serve Mapbox vector tiles directly from a PostGIS database",
+  "main": "mvt_server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Geodan/postgis-mvt-server.git"
+  },
+  "keywords": [
+    "PostGIS",
+    "vector",
+    "tiles"
+  ],
+  "author": "Rubio Vaughan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Geodan/postgis-mvt-server/issues"
+  },
+  "homepage": "https://github.com/Geodan/postgis-mvt-server#readme",
+  "dependencies": {
+    "compression": "^1.6.2",
+    "express": "^4.14.1",
+    "pg": "^6.1.2"
+  }
+}
