@@ -35,8 +35,8 @@ app.get('/bgt/:z/:x/:y', function(req, res) {
 	var miny = tile2lat(y+1,z);
 	var maxy = tile2lat(y,z);
 	
-	var query_pand = `SELECT ST_AsMVT('bgtpand', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt FROM (SELECT ST_Transform(wkb_geometry, 4326) geom, lokaalid FROM bgt.pand_2d WHERE ST_Intersects(wkb_geometry, ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992))) AS q`;
-	var query_weg = `SELECT ST_AsMVT('bgtweg', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt FROM (SELECT ST_Transform(wkb_geometry, 4326) geom FROM bgt.wegdeel_2d WHERE ST_Intersects(wkb_geometry, ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992))) AS q`;
+	var query_pand = `SELECT ST_AsMVT('pand', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt FROM (SELECT ST_Transform(wkb_geometry, 4326) geom, lokaalid FROM bgt.pand_2d WHERE ST_Intersects(wkb_geometry, ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992))) AS q`;
+	var query_weg = `SELECT ST_AsMVT('weg', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt FROM (SELECT ST_Transform(wkb_geometry, 4326) geom FROM bgt.wegdeel_2d WHERE ST_Intersects(wkb_geometry, ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992))) AS q`;
 
 	var onError = function(err) {
 		console.log(err.message, err.stack)
