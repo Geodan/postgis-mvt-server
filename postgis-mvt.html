@@ -15,7 +15,7 @@
 
 <div id='map'></div>
 <script>
-mapboxgl.accessToken = '<Mapbox access token here>';
+mapboxgl.accessToken = 'pk.eyJ1IjoidGlsdCIsImEiOiJjaXl5dnAydjYwMDAxMnFwYWR1Z2ZjMngwIn0.JYt8pUcgFf9QETgo5FzA0A';
 var map = new mapboxgl.Map({
     container: 'map', // container id
     style: 'mapbox://styles/mapbox/dark-v9', //hosted style id
@@ -27,7 +27,7 @@ map.on('load', function () {
 	var bgt = {
 	  "type": "vector",
 	  "tiles": [
-		"http://metis:3001/bgt/{z}/{x}/{y}"
+		"http://localhost:3001/bgt/{z}/{x}/{y}"
 	  ],
 	  "maxzoom": 19
 	}

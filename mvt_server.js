@@ -23,9 +23,10 @@ process.on('unhandledRejection', function(e) {
 })
 
 var pool = new Pool(pgconfig);
-//app.use(compression());
+//app.use(compression()); //Compression seems to slow down significantly and wouldn't add much
 
-app.get('/bgt/:z/:x/:y', function(req, res) {
+app.get('/bgt/:layer/:z/:x/:y.mvt', function(req, res) {
+	var layer = (req.params.layer);
 	var x = parseInt(req.params.x);
 	var y = parseInt(req.params.y);
 	var z = parseInt(req.params.z);  
@@ -35,31 +36,56 @@ app.get('/bgt/:z/:x/:y', function(req, res) {
 	var miny = tile2lat(y+1,z);
 	var maxy = tile2lat(y,z);
 	
-	var query_pand = `SELECT ST_AsMVT('pand', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt FROM (SELECT ST_Transform(wkb_geometry, 4326) geom, lokaalid FROM bgt.pand_2d WHERE ST_Intersects(wkb_geometry, ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992))) AS q`;
-	var query_weg = `SELECT ST_AsMVT('weg', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt FROM (SELECT ST_Transform(wkb_geometry, 4326) geom FROM bgt.wegdeel_2d WHERE ST_Intersects(wkb_geometry, ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992))) AS q`;
+	switch (layer){
+		case 'ondersteunendwaterdeel_2d':
+		case 'scheiding_2d':
+		case 'waterdeel_2d':
+			var col = 'bgt_type';
+			break;
+		case 'begroeidterreindeel_2d':
+		case 'onbegroeidterreindeel_2d':
+			var col = 'bgt_fysiekvoorkomen';
+			break;
+		case 'ondersteunendwegdeel_2d':
+		case 'wegdeel_2d':
+			var col = 'bgt_functie';
+			break;
+		default:
+			var col = 'bgt_status';
+	}
+				
+	
+	var query = `
+	WITH bbox AS (
+		SELECT ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992) AS geom
+	)
+	,items AS (
+		SELECT ST_Transform(wkb_geometry, 4326) geom, lokaalid as id, ${col} as kind 
+		FROM bgt.${layer} , bbox
+		WHERE ST_Intersects(bbox.geom, wkb_geometry)
+		AND relatievehoogteligging = 0
+		LIMIT 1000 --Security
+	)
+	SELECT ST_AsMVT('${layer}', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt 
+	FROM items AS q
+	`;
 
 	var onError = function(err) {
-		console.log(err.message, err.stack)
+		console.log(err.message, err.stack,query)
 		res.status(500).send('An error occurred');
 	};
 
-	pool.query(query_pand, function(err, result) {
+	pool.query(query, function(err, result) {
 		if (err) return onError(err);
 		
-		var pandmvt = result.rows[0].mvt;
-		pool.query(query_weg, function(err, result) {
+		var mvt = result.rows[0].mvt;
+		pool.query(query, function(err, result) {
 			if (err) return onError(err);
 			res.status(200).header('content-type', 'application/octet-stream');
 			res.header("Access-Control-Allow-Origin", "*");
 			res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-			var wegmvt = result.rows[0].mvt;
-			if (pandmvt && wegmvt) {
-				res.send(Buffer.concat([new Buffer(pandmvt), new Buffer(wegmvt)]));
-			} else if (pandmvt) {
-				res.send(pandmvt);
-			} else {
-				res.send(wegmvt);
-			}
+			var mvt = result.rows[0].mvt;
+			res.send(mvt);
 		});
 	});
 });
