@@ -2,6 +2,7 @@ var compression = require('compression');
 var express = require('express');
 var app = express();
 var Pool = require('pg').Pool;
+const SQL = require('sql-template-strings');
 
 function tile2long(x,z) {
 	return (x/Math.pow(2,z)*360-180);
@@ -55,7 +56,7 @@ app.get('/bgt/:layer/:z/:x/:y.mvt', function(req, res) {
 	}
 				
 	
-	var query = `
+	var query = SQL`
 	WITH bbox AS (
 		SELECT ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992) AS geom
 	)
@@ -77,16 +78,11 @@ app.get('/bgt/:layer/:z/:x/:y.mvt', function(req, res) {
 
 	pool.query(query, function(err, result) {
 		if (err) return onError(err);
-		
+		res.status(200).header('content-type', 'application/octet-stream');
+		res.header("Access-Control-Allow-Origin", "*");
+		res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
 		var mvt = result.rows[0].mvt;
-		pool.query(query, function(err, result) {
-			if (err) return onError(err);
-			res.status(200).header('content-type', 'application/octet-stream');
-			res.header("Access-Control-Allow-Origin", "*");
-			res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-			var mvt = result.rows[0].mvt;
-			res.send(mvt);
-		});
+		res.send(mvt);
 	});
 });
 

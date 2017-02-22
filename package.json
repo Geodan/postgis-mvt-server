@@ -24,6 +24,7 @@
   "dependencies": {
     "compression": "^1.6.2",
     "express": "^4.14.1",
-    "pg": "^6.1.2"
+    "pg": "^6.1.2",
+    "sql-template-strings": "^2.2.2"
   }
 }
