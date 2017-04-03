@@ -4,87 +4,115 @@ var app = express();
 var Pool = require('pg').Pool;
 const SQL = require('sql-template-strings');
 
-function tile2long(x,z) {
-	return (x/Math.pow(2,z)*360-180);
-}
-function tile2lat(y,z) {
-	var n=Math.PI-2*Math.PI*y/Math.pow(2,z);
-	return (180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))));
-}
- 
+process.on('unhandledRejection', function(e) {
+	console.log(e.message, e.stack);
+})
+
 var pgconfig = {
 	host: 'localhost',
 	user: 'postgres',
 	password: '',
 	database: 'research',
 };
-
-process.on('unhandledRejection', function(e) {
-	console.log(e.message, e.stack);
-})
-
 var pool = new Pool(pgconfig);
-//app.use(compression()); //Compression seems to slow down significantly and wouldn't add much
 
-app.get('/bgt/:layer/:z/:x/:y.mvt', function(req, res) {
-	var layer = (req.params.layer);
+var sources = {
+	'terrorism': {
+		'table': 'globalterrorismdb_0616',
+		'geometry': 'shape',
+		'type': 'point',
+		'srid': 4326,
+		'minzoom': 0,
+		'maxzoom': 19,
+		'fields': 'nkill Casualties',
+		'groupby': ''
+	},
+	'nwb': {
+		'table': 'nwb_2016_01.weg_wegvakken',
+		'geometry': 'geom',
+		'type': 'polygon',
+		'srid': 28992,
+		'minzoom': 6,
+		'maxzoom': 13,
+		'fields': ''
+	},
+	'woonplaatsen': {
+		'table': 'bagagn_201702.woonplaats',
+		'geometry': 'geom',
+		'type': 'polygon',
+		'srid': 28992,
+		'minzoom': 6,
+		'maxzoom': 13,
+		'fields': 'woonplaats Woonplaats'
+	},
+	'buurten': {
+		'table': 'cbs.buurten',
+		'geometry': 'wkb_geometry',
+		'type': 'polygon',
+		'srid': 28992,
+		'minzoom': 6,
+		'maxzoom': 13,
+		'fields': 'buurtnaam Buurt, a_inw Inwoners'
+	},
+	'gebouwen': {
+		'table': 'bagagn_201702.gebouwen',
+		'geometry': 'geom',
+		'type': 'polygon',
+		'srid': 28992,
+		'minzoom': 14,
+		'maxzoom': 20,
+		'fields': 'bouwjaar Bouwjaar, oppvlakte Oppervlakte'
+	},
+	'wegen': {
+		'table': 'bgt.wegdeel_2d',
+		'geometry': 'wkb_geometry',
+		'type': 'polygon',
+		'srid': 28992,
+		'minzoom': 14,
+		'maxzoom': 20,
+		'fields': 'bgt_functie Functie'
+	}
+};
+
+app.get('/mvt/:layer/:z/:x/:y.mvt', function(req, res) {
 	var x = parseInt(req.params.x);
 	var y = parseInt(req.params.y);
 	var z = parseInt(req.params.z);  
-
-	var minx = tile2long(x,z);
-	var maxx = tile2long(x+1,z);
-	var miny = tile2lat(y+1,z);
-	var maxy = tile2lat(y,z);
-	
-	switch (layer){
-		case 'ondersteunendwaterdeel_2d':
-		case 'scheiding_2d':
-		case 'waterdeel_2d':
-			var col = 'bgt_type';
-			break;
-		case 'begroeidterreindeel_2d':
-		case 'onbegroeidterreindeel_2d':
-			var col = 'bgt_fysiekvoorkomen';
-			break;
-		case 'ondersteunendwegdeel_2d':
-		case 'wegdeel_2d':
-			var col = 'bgt_functie';
-			break;
-		default:
-			var col = 'bgt_status';
+	var layer = req.params.layer;
+	if (!sources.hasOwnProperty(layer)) {
+		console.log('Invalid source: ' + layer);
+		res.status(500).send('Invalid source: ' + layer);
+		return;
 	}
-				
-	
-	var query = SQL`
-	WITH bbox AS (
-		SELECT ST_Transform(ST_MakeEnvelope(${minx},${miny},${maxx},${maxy}, 4326), 28992) AS geom
-	)
-	,items AS (
-		SELECT ST_Transform(wkb_geometry, 4326) geom, lokaalid as id, ${col} as kind 
-		FROM bgt.${layer} , bbox
-		WHERE ST_Intersects(bbox.geom, wkb_geometry)
-		AND relatievehoogteligging = 0
-		LIMIT 1000 --Security
-	)
-	SELECT ST_AsMVT('${layer}', ST_MakeBox2D(ST_Point(${minx},${miny}), ST_Point(${maxx},${maxy})), 4096, 0, false, 'geom', q) mvt 
-	FROM items AS q
-	`;
+	var source = sources[layer];
 
 	var onError = function(err) {
 		console.log(err.message, err.stack,query)
 		res.status(500).send('An error occurred');
 	};
 
+	var fields = source.fields ? ', ' + source.fields : '';
+	var join = source.join ? source.join : '';
+	var groupby = source.groupby ? source.groupby : '';
+	
+	var query = `
+	SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
+		SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${fields}
+		FROM ${source.table}
+		${join}
+		WHERE ST_Intersects(TileBBox(${z}, ${x}, ${y}, ${source.srid}), ${source.table}.${source.geometry})
+		${groupby}
+	) AS q
+	`;
+	//console.log(query);
 	pool.query(query, function(err, result) {
 		if (err) return onError(err);
 		res.status(200).header('content-type', 'application/octet-stream');
 		res.header("Access-Control-Allow-Origin", "*");
 		res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-		var mvt = result.rows[0].mvt;
-		res.send(mvt);
-	});
+		res.send(result.rows[0].mvt);
+	});	
 });
 
 app.listen(3001);
-console.log('server is listening on 3001')
+console.log('mvt server is listening on 3001')

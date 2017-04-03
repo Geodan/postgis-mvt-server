@@ -4,60 +4,245 @@
     <meta charset='utf-8' />
     <title></title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
-    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.21.0/mapbox-gl.js'></script>
-    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.21.0/mapbox-gl.css' rel='stylesheet' />
+	<script src='https://api.mapbox.com/mapbox-gl-js/v0.32.1/mapbox-gl.js'></script>
+	<script src='https://npmcdn.com/@turf/turf/turf.min.js'></script> 
+	<link href='https://api.mapbox.com/mapbox-gl-js/v0.32.1/mapbox-gl.css' rel='stylesheet' />
     <style>
         body { margin:0; padding:0; }
         #map { position:absolute; top:0; bottom:0; width:100%; }
     </style>
+<style>
+    #menu {
+        background: #fff;
+        position: absolute;
+        z-index: 1;
+        top: 10px;
+        right: 10px;
+        border-radius: 3px;
+        width: 120px;
+        border: 1px solid rgba(0,0,0,0.4);
+        font-family: 'Open Sans', sans-serif;
+    }
+
+    #menu a {
+        font-size: 13px;
+        color: #404040;
+        display: block;
+        margin: 0;
+        padding: 0;
+        padding: 10px;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(0,0,0,0.25);
+        text-align: center;
+    }
+
+    #menu a:last-child {
+        border: none;
+    }
+
+    #menu a:hover {
+        background-color: #f8f8f8;
+        color: #404040;
+    }
+
+    #menu a.active {
+        background-color: #3887be;
+        color: #ffffff;
+    }
+
+    #menu a.active:hover {
+        background: #3074a4;
+    }
+</style>
 </head>
 <body>
 
 <div id='map'></div>
+<nav id="menu">
+	<a href="#" onClick="switchStyle('style1')">Style 1</a>
+	<a href="#" onClick="switchStyle('style2')">Style 2</a>
+	<a href="#" onClick="switchStyle('style3')">Style 3</a>
+</nav>
 <script>
 mapboxgl.accessToken = 'pk.eyJ1IjoidGlsdCIsImEiOiJjaXl5dnAydjYwMDAxMnFwYWR1Z2ZjMngwIn0.JYt8pUcgFf9QETgo5FzA0A';
 var map = new mapboxgl.Map({
     container: 'map', // container id
     style: 'mapbox://styles/mapbox/dark-v9', //hosted style id
-    center: [4.913058,52.342188], // starting position
+    center: [4.898, 52.370], //[4.913058,52.342188], // starting position
     zoom: 16 // starting zoom
 });
 
-map.on('load', function () {
-	var bgt = {
-	  "type": "vector",
-	  "tiles": [
-		"http://localhost:3001/bgt/{z}/{x}/{y}"
-	  ],
-	  "maxzoom": 19
+function switchStyle(style){
+	switch (style) {
+		case 'style3':
+			map.setPaintProperty('wegen', 'fill-color', '#19bad2');
+			map.setPaintProperty('wegen', 'fill-outline-color', '#39eae2');
+			map.setPaintProperty('gebouwen', 'fill-color', '#d2197f');
+			map.setPaintProperty('gebouwen', 'fill-outline-color', '#f2499f');
+			map.setPaintProperty('terrorism', 'circle-color', {
+				'property': 'casualties',
+				'type': 'interval',
+				'stops': [
+					[0, '#ffffff'],
+					[1, '#b2ffff'],
+					[5, '#5cfecc'],
+					[10, '#3cfd8d'],
+					[50, '#26bd00']
+				]
+			});
+			break;
+		case 'style2':
+			map.setPaintProperty('wegen', 'fill-color', '#0a49f4');
+			map.setPaintProperty('wegen', 'fill-outline-color', '#4a99ff');
+			map.setPaintProperty('gebouwen', 'fill-color', '#f4490a');
+			map.setPaintProperty('gebouwen', 'fill-outline-color', '#ff994a');
+			map.setPaintProperty('terrorism', 'circle-color', {
+				'property': 'casualties',
+				'type': 'interval',
+				'stops': [
+					[0, '#ffffff'],
+					[1, '#ffb2ff'],
+					[5, '#cc5cfe'],
+					[10, '#8d3cfd'],
+					[50, '#0026bd']
+				]
+			});
+			break;
+		case 'style1':
+		default:
+			map.setPaintProperty('wegen', 'fill-color', '#f4490a');
+			map.setPaintProperty('wegen', 'fill-outline-color', '#ff994a');
+			map.setPaintProperty('gebouwen', 'fill-color', '#0a49f4');
+			map.setPaintProperty('gebouwen', 'fill-outline-color', '#4a99ff');
+			map.setPaintProperty('terrorism', 'circle-color', {
+				'property': 'casualties',
+				'type': 'interval',
+				'stops': [
+					[0, '#ffffff'],
+					[1, '#ffffb2'],
+					[5, '#fecc5c'],
+					[10, '#fd8d3c'],
+					[50, '#bd0026']
+				]
+			});
 	}
-	map.addSource('bgt', bgt);
+}
+
+map.on('load', function () {
+	var gebouwen = {
+		'type': 'vector',
+		'tiles': [
+			'http://metis:3001/mvt/gebouwen/{z}/{x}/{y}.mvt'
+		]
+	};
+	map.addSource('gebouwen', gebouwen);
+	var wegen = {
+		'type': 'vector',
+		'tiles': [
+			'http://metis:3001/mvt/wegen/{z}/{x}/{y}.mvt'
+		]
+	};
+	map.addSource('wegen', wegen);
+	var terrorism = {
+		'type': 'vector',
+		'tiles': [
+			'http://metis:3001/mvt/terrorism/{z}/{x}/{y}.mvt'
+		]
+	};
+	map.addSource('terrorism', terrorism);
 	map.addLayer({
-		'id': 'pand',
-		'source': 'bgt',
-		'source-layer': 'pand',
+		'id': 'gebouwen',
+		'source': 'gebouwen',
+		'source-layer': 'gebouwen',
 		'type': 'fill',
-        "layout": {
-        },
-		'paint': {
-            "fill-color": "#ff69b4",
-			"fill-outline-color": "#ff99e4",
+		'minzoom': 13,
+		'maxzoom': 19,
+        'paint': {
+            "fill-color": "#0a49f4",
+			"fill-outline-color": "#4a99ff",
             "fill-opacity": 0.5
 		}
 	});
 	map.addLayer({
-		'id': 'weg',
-		'source': 'bgt',
-		'source-layer': 'weg',
+		'id': 'wegen',
+		'source': 'wegen',
+		'source-layer': 'wegen',
 		'type': 'fill',
-        "layout": {},
+		'minzoom': 13,
+		'maxzoom': 19,
+        'paint': {
+            "fill-color": "#f4490a",
+			"fill-outline-color": "#ff994a",
+            "fill-opacity": 0.5
+		}
+	});
+	map.addLayer({
+		'id': 'terrorism',
+		'source': 'terrorism',
+		'source-layer': 'terrorism',
+		'type': 'circle',
+		'maxzoom': 13,
 		'paint': {
-            "fill-color": "#627BC1",
-			"fill-opacity": 0.5
+			'circle-radius': {
+				'property': 'casualties',
+				'stops': [
+					[{zoom: 1,  value: 0}, 1],
+					[{zoom: 1,  value: 50}, 3],
+					[{zoom: 9, value: 0}, 1],
+					[{zoom: 9, value: 50}, 10],
+					[{zoom: 16, value: 0}, 3],
+					[{zoom: 16, value: 50}, 40]
+				]
+			},
+			'circle-color': {
+				'property': 'casualties',
+				'type': 'interval',
+				'stops': [
+					[0, '#ffffff'],
+					[1, '#ffffb2'],
+					[5, '#fecc5c'],
+					[10, '#fd8d3c'],
+					[50, '#bd0026']
+				]
+			},
+			//'circle-radius': 2,
+			//'circle-color': '#bd0026',
+			'circle-opacity': 0.5
 		}
 	});
 	
+	var popup = new mapboxgl.Popup({
+		closeButton: false,
+		closeOnClick: false
+	});
+
+	map.on('mousemove', function(e) {
+		var features = map.queryRenderedFeatures(e.point, { layers: ['gebouwen', 'wegen', 'terrorism'] });
+		// Change the cursor style as a UI indicator.
+		if (!features) return;
+		map.getCanvas().style.cursor = (features.length) ? 'pointer' : '';
+
+		if (!features.length) {
+			popup.remove();
+			return;
+		}
+
+		var feature = features[0];
+
+		var poptext = '';
+		var props = Object.keys(feature.properties);
+		for (var i=0; i<props.length; i++) {
+			if (poptext)
+				poptext += '<br>';
+			poptext += props[i] + ': ' + feature.properties[props[i]];
+		}
+		
+		popup.setLngLat(turf.centroid(feature.geometry).geometry.coordinates)
+			.setHTML(poptext)
+			.addTo(map);
+	});
 });
+
 
 </script>
 
