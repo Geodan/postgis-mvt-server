@@ -64,7 +64,7 @@
 	<a href="#" onClick="switchStyle('style3')">Style 3</a>
 </nav>
 <script>
-mapboxgl.accessToken = 'pk.eyJ1IjoidGlsdCIsImEiOiJjaXl5dnAydjYwMDAxMnFwYWR1Z2ZjMngwIn0.JYt8pUcgFf9QETgo5FzA0A';
+mapboxgl.accessToken = '';
 var map = new mapboxgl.Map({
     container: 'map', // container id
     style: 'mapbox://styles/mapbox/dark-v9', //hosted style id
@@ -156,26 +156,24 @@ map.on('load', function () {
 		'source-layer': 'gebouwen',
 		'type': 'fill',
 		'minzoom': 13,
-		'maxzoom': 19,
         'paint': {
             "fill-color": "#0a49f4",
 			"fill-outline-color": "#4a99ff",
             "fill-opacity": 0.5
 		}
-	});
+	}, 'waterway-label');
 	map.addLayer({
 		'id': 'wegen',
 		'source': 'wegen',
 		'source-layer': 'wegen',
 		'type': 'fill',
 		'minzoom': 13,
-		'maxzoom': 19,
         'paint': {
             "fill-color": "#f4490a",
 			"fill-outline-color": "#ff994a",
             "fill-opacity": 0.5
 		}
-	});
+	}, 'waterway-label');
 	map.addLayer({
 		'id': 'terrorism',
 		'source': 'terrorism',
@@ -209,7 +207,7 @@ map.on('load', function () {
 			//'circle-color': '#bd0026',
 			'circle-opacity': 0.5
 		}
-	});
+	}, 'waterway-label');
 	
 	var popup = new mapboxgl.Popup({
 		closeButton: false,
