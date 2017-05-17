@@ -102,7 +102,7 @@ app.get('/mvt/:layer/:z/:x/:y.mvt', function(req, res) {
 		${join}
 		WHERE ST_Intersects(TileBBox(${z}, ${x}, ${y}, ${source.srid}), ${source.table}.${source.geometry})
 		${groupby}
-	) AS q
+	) AS q where q.geom is not null
 	`;
 	//console.log(query);
 	pool.query(query, function(err, result) {
