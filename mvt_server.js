@@ -127,5 +127,5 @@ app.get('/mvt/:layer/:z/:x/:y.mvt', function(req, res) {
 	});	
 });
 
-app.listen(3002);
-console.log('mvt server is listening on 3002')
+app.listen(3001);
+console.log('mvt server is listening on 3001')
