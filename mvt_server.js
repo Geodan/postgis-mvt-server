@@ -71,6 +71,14 @@ var sources = {
 		'minzoom': 14,
 		'maxzoom': 20,
 		'fields': 'bgt_functie Functie'
+	},
+	'gemeenten2016': {
+		'table': 'cbs.gemeenten2016',
+		'geometry': 'geom',
+		'type' : 'polygon',
+		'srid' : 28992,
+		'fields' : 'gm_code, gm_naam, water',
+		'groupby' : ''
 	}
 };
 
@@ -107,12 +115,17 @@ app.get('/mvt/:layer/:z/:x/:y.mvt', function(req, res) {
 	//console.log(query);
 	pool.query(query, function(err, result) {
 		if (err) return onError(err);
-		res.status(200).header('content-type', 'application/octet-stream');
+		if (result.rows[0].mvt) {
+			res.status(200);
+		} else {
+			res.status(204); // no content
+		}
+		res.header('content-type', 'application/octet-stream');
 		res.header("Access-Control-Allow-Origin", "*");
 		res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
 		res.send(result.rows[0].mvt);
 	});	
 });
 
-app.listen(3001);
-console.log('mvt server is listening on 3001')
+app.listen(3002);
+console.log('mvt server is listening on 3002')
