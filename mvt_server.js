@@ -3,109 +3,72 @@ var express = require('express');
 var app = express();
 var Pool = require('pg').Pool;
 const SQL = require('sql-template-strings');
+var fs = require('fs');
+var config = require(__dirname + '/config.json');
 
 process.on('unhandledRejection', function(e) {
 	console.log(e.message, e.stack);
 })
 
-var pgconfig = {
-	host: 'localhost',
-	user: 'postgres',
-	password: '',
-	database: 'research',
-};
-var pool = new Pool(pgconfig);
-
-var sources = {
-	'terrorism': {
-		'table': 'globalterrorismdb_0616',
-		'geometry': 'shape',
-		'type': 'point',
-		'srid': 4326,
-		'minzoom': 0,
-		'maxzoom': 19,
-		'fields': 'nkill Casualties',
-		'groupby': ''
-	},
-	'nwb': {
-		'table': 'nwb_2016_01.weg_wegvakken',
-		'geometry': 'geom',
-		'type': 'polygon',
-		'srid': 28992,
-		'minzoom': 6,
-		'maxzoom': 13,
-		'fields': ''
-	},
-	'woonplaatsen': {
-		'table': 'bagagn_201702.woonplaats',
-		'geometry': 'geom',
-		'type': 'polygon',
-		'srid': 28992,
-		'minzoom': 6,
-		'maxzoom': 13,
-		'fields': 'woonplaats Woonplaats'
-	},
-	'buurten': {
-		'table': 'cbs.buurten',
-		'geometry': 'wkb_geometry',
-		'type': 'polygon',
-		'srid': 28992,
-		'minzoom': 6,
-		'maxzoom': 13,
-		'fields': 'buurtnaam Buurt, a_inw Inwoners'
-	},
-	'gebouwen': {
-		'table': 'bagagn_201702.gebouwen',
-		'geometry': 'geom',
-		'type': 'polygon',
-		'srid': 28992,
-		'minzoom': 14,
-		'maxzoom': 20,
-		'fields': 'bouwjaar Bouwjaar, oppvlakte Oppervlakte'
-	},
-	'wegen': {
-		'table': 'bgt.wegdeel_2d',
-		'geometry': 'wkb_geometry',
-		'type': 'polygon',
-		'srid': 28992,
-		'minzoom': 14,
-		'maxzoom': 20,
-		'fields': 'bgt_functie Functie'
-	},
-	'gemeenten2016': {
-		'table': 'cbs.gemeenten2016',
-		'geometry': 'geom',
-		'type' : 'polygon',
-		'srid' : 28992,
-		'fields' : 'gm_code, gm_naam, water',
-		'groupby' : ''
+var dbpools = {};
+for (db in config.databases) {
+	console.log("Setting up pool for database '" + db + "'");
+	dbpools[db] = new Pool(config.databases[db]);
+}
+var sources = {};
+var sourcedir = __dirname + '/' + config.sourcedir + '/';
+fs.readdirSync(sourcedir).forEach(file => {
+	var matches = file.match(/^(\w+)\.json$/)
+	if (!matches){
+		console.log('Skipping unknown source file: ' + file);
+		return;
 	}
-};
+	console.log('Reading source file ' + file);
+	var sourcename = matches[1];
+	try {
+		var json = fs.readFileSync(sourcedir + file, 'utf8');
+		var source = JSON.parse(json);
+		if (!dbpools.hasOwnProperty(source.database)) {
+			console.log("Unknown database '" + source.database + "' in " + file);
+			return;
+		}
+		sources[sourcename] = source;
+	} catch (err) {
+		console.log('Invalid source file: ' + file);
+		console.log(err.message);
+	}
+});
 
 app.get('/mvt/:layer/:z/:x/:y.mvt', function(req, res) {
 	var x = parseInt(req.params.x);
 	var y = parseInt(req.params.y);
 	var z = parseInt(req.params.z);  
 	var layer = req.params.layer;
+	if (!layer.match(/^\w+$/)){
+		console.log('Invalid source name: ' + layer);
+		res.status(400).send('Invalid source name: ' + layer);
+		return;
+	}
 	if (!sources.hasOwnProperty(layer)) {
-		console.log('Invalid source: ' + layer);
-		res.status(500).send('Invalid source: ' + layer);
+		console.log('Unknown source: ' + layer);
+		res.status(404).send('Unknown source: ' + layer);
 		return;
 	}
 	var source = sources[layer];
-
+	var pool = dbpools[source.database];
+	
 	var onError = function(err) {
-		console.log(err.message, err.stack,query)
+		console.log(err.message, err.stack, query)
 		res.status(500).send('An error occurred');
 	};
 
-	var fields = source.fields ? ', ' + source.fields : '';
+	var attributes = source.attributes ? ', ' + source.attributes : '';
 	var join = source.join ? source.join : '';
 	var groupby = source.groupby ? source.groupby : '';
 	
 	var query = `
 	SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
-		SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${fields}
+		SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${attributes}
 		FROM ${source.table}
 		${join}
 		WHERE ST_Intersects(TileBBox(${z}, ${x}, ${y}, ${source.srid}), ${source.table}.${source.geometry})

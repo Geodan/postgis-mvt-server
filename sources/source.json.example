@@ -1,0 +1,10 @@
+{
+	"database": "<dbname>",
+	"table": "<schema>.<table>",
+	"geometry": "<geom_column>",
+	"type": "<polygon|polyline|point>",
+	"srid": 4326,
+	"minzoom": 6,
+	"maxzoom": 13,
+	"attributes": "<column1> [Alias1], <column1> [Alias2]"
+}

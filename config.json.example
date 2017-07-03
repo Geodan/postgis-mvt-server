@@ -1,0 +1,13 @@
+{
+	"port": 3001,
+	"databases": {
+		"<dbname>": {
+			"host": "localhost",
+			"port": 5432,
+			"user": "postgres",
+			"password": "",
+			"database": "<database name>"
+		}
+	},
+	"sourcedir": "sources"	
+}
