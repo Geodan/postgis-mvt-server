@@ -35,60 +35,86 @@ fs.readdirSync(sourcedir).forEach(file => {
 		sources[sourcename] = source;
 	} catch (err) {
 		console.log('Invalid source file: ' + file);
-		console.log(err.message);
 	}
 });
 
-app.get('/mvt/:layer/:z/:x/:y.mvt', function(req, res) {
+app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 	var x = parseInt(req.params.x);
 	var y = parseInt(req.params.y);
-	var z = parseInt(req.params.z);  
-	var layer = req.params.layer;
-	if (!layer.match(/^\w+$/)){
-		console.log('Invalid source name: ' + layer);
-		res.status(400).send('Invalid source name: ' + layer);
-		return;
-	}
-	if (!sources.hasOwnProperty(layer)) {
-		console.log('Unknown source: ' + layer);
-		res.status(404).send('Unknown source: ' + layer);
-		return;
-	}
-	var source = sources[layer];
-	var pool = dbpools[source.database];
+	var z = parseInt(req.params.z);
+	var code = 0;
+	var response = '';
+	var layers = req.params.layers.split(',');
 	
-	var onError = function(err) {
-		console.log(err.message, err.stack, query)
-		res.status(500).send('An error occurred');
-	};
-
-	var attributes = source.attributes ? ', ' + source.attributes : '';
-	var join = source.join ? source.join : '';
-	var groupby = source.groupby ? source.groupby : '';
-	
-	var query = `
-	SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
-		SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${attributes}
-		FROM ${source.table}
-		${join}
-		WHERE ST_Intersects(TileBBox(${z}, ${x}, ${y}, ${source.srid}), ${source.table}.${source.geometry})
-		${groupby}
-	) AS q where q.geom is not null
-	`;
-	//console.log(query);
-	pool.query(query, function(err, result) {
-		if (err) return onError(err);
-		if (result.rows[0].mvt) {
-			res.status(200);
-		} else {
-			res.status(204); // no content
+	var queries = [];
+	for (var i=0; i<layers.length; i++) {
+		var layer = layers[i];
+		if (!layer.match(/^\w+$/)){
+			console.log('Invalid source name: ' + layer);
+			code = 400;
+			reponse = 'Invalid source name: ' + layer;
+			break;
 		}
-		res.header('content-type', 'application/octet-stream');
-		res.header("Access-Control-Allow-Origin", "*");
-		res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-		res.send(result.rows[0].mvt);
-	});	
+		if (!sources.hasOwnProperty(layer)) {
+			console.log('Unknown source: ' + layer);
+			code = 404;
+			response = 'Unknown source: ' + layer;
+			break;
+		}
+		var source = sources[layer];
+		var pool = dbpools[source.database];
+		
+		var attributes = source.attributes ? ', ' + source.attributes : '';
+		var join = source.join ? source.join : '';
+		var groupby = source.groupby ? source.groupby : '';
+		
+		var query_text = `
+		SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
+			SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${attributes}
+			FROM ${source.table}
+			${join}
+			WHERE ST_Intersects(TileBBox(${z}, ${x}, ${y}, ${source.srid}), ${source.table}.${source.geometry})
+			${groupby}
+		) AS q where q.geom is not null
+		`;
+		//console.log(query_text);
+		queries.push(pool.query(query_text));
+	}
+	
+	if (code) { // an error occured
+		res.status(code);
+		res.send(response);
+	} else {
+		Promise.all(queries).then(values => {
+			if (values.length == 0) {
+				response = '';
+			} else if (values.length == 1) {
+				response = values[0].rows[0].mvt;
+			} else if (values.length > 1) {
+				var buffers = [];
+				values.forEach(val => {
+					if (val.rows[0].mvt) {
+						buffers.push(new Buffer(val.rows[0].mvt));
+					}
+				});
+				if (buffers.length > 0)	response = Buffer.concat(buffers);
+			}
+			if (response) {
+				res.status(200);
+			} else {
+				res.status(204); // no content
+			}
+			res.header('content-type', 'application/octet-stream');
+			res.header("Access-Control-Allow-Origin", "*");
+			res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+			res.send(response);
+		}).catch(reason => {
+			console.log('Error executing database query: ' + reason.message, reason.stack);
+			res.status(500);
+			res.send('An error occurred');
+		});
+	}
 });
 
-app.listen(3001);
-console.log('mvt server is listening on 3001')
+app.listen(config.port);
+console.log('mvt server is listening on port ' + config.port);
