@@ -1,4 +1,5 @@
 {
+	"name": "<mvt layer name>",
 	"database": "<dbname>",
 	"table": "<schema>.<table>",
 	"geometry": "<geom_column>",
