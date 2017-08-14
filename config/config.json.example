@@ -4,13 +4,13 @@
 		"<dbname>": {
 			"host": "localhost",
 			"port": 5432,
-			"user": "postgres",
-			"password": "",
+			"user": "<user>",
+			"password": "<password>",
 			"database": "<database name>"
 		}
 	},
 	"uploads": {
-		"database": "<dbname>",
+		"database": "<dbname (as above)>",
 		"schema": "<schema>",
 		"directory": "uploads"
 	},
