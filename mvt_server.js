@@ -93,7 +93,7 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 		var source = g_sources[layer];
 		var pool = g_dbpools[source.database];
 		
-		var attributes = JsonObject(attributes);
+		var attributes = JsonObject(source.attributes);
 		var join = source.join ? source.join : '';
 		var groupby = source.groupby ? source.groupby : '';
 
