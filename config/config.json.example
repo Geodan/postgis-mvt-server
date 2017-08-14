@@ -10,7 +10,7 @@
 		}
 	},
 	"uploads": {
-		"database": "<database name>",
+		"database": "<dbname>",
 		"schema": "<schema>",
 		"directory": "uploads"
 	},
