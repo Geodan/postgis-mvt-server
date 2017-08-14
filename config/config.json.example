@@ -9,5 +9,11 @@
 			"database": "<database name>"
 		}
 	},
+	"uploads": {
+		"database": "<database name>",
+		"schema": "<schema>",
+		"directory": "uploads"
+	},
 	"sourcedir": "sources"	
+	"server_url": "http://<host>:3001"
 }

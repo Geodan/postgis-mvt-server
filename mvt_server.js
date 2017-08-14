@@ -8,7 +8,7 @@ const fs = require('fs-extra');
 const unzip = require('unzip');
 const ogr2ogr = require('ogr2ogr')
 const g_config = require(__dirname + '/config/config.json');
-
+const g_styletemplate = require(__dirname + '/config/styletemplate.json');
 process.on('unhandledRejection', function(e) {
 	console.log(e.message, e.stack);
 })
@@ -65,7 +65,6 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 			break;
 		}
 		var source = g_sources[layer];
-		var name = source.name;
 		var pool = g_dbpools[source.database];
 		
 		var attributes = source.attributes ? ', ' + source.attributes : '';
@@ -73,7 +72,7 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 		var groupby = source.groupby ? source.groupby : '';
 		
 		var query_text = `
-		SELECT ST_AsMVT('${name}', 4096, 'geom', q) AS mvt FROM (
+		SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
 			SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${attributes}
 			FROM ${source.table}
 			${join}
@@ -175,29 +174,36 @@ function loadGeoJson(file) {
 	
 	return new Promise( function(resolve, reject) {
 		console.log('loading geojson');
-		var matches = file.match(/\/(\w+)_unzip\/[^\/]+$/);
-		var table = matches[1];
+		var matches = file.match(/\/(\w+)_unzip\/(.+)\.(json|geojson)$/);
+		var id = matches[1];
+		var name = matches[2];
+		
 		ogr2ogr(file)
 			.format('PostgreSQL')
-			.options(['-nln', schema + '.' + table])
+			.options(['-nln', schema + '.' + id])
 			.destination(pgstr)
 			.timeout(60000)
 			.exec(function(err) {
 				if (err) {
 					reject(err.message); return;
 				}
-				resolve(table);
+				resolve({
+					'id': id,
+					'name': name
+				});
 			});
 	});
 }
 
-function makeConfig(table) {
+function makeConfig(res) {
+	var id = res.id;
+	var name = res.name;
 	return new Promise(function(resolve, reject) {
 		var schema = g_config.uploads.schema;
 		var pool = g_dbpools[g_config.uploads.database];
-		//var query = `SELECT * FROM ${table} WHERE false`;
+		//var query = `SELECT * FROM ${id} WHERE false`;
 		var query = `SELECT column_name, udt_name FROM INFORMATION_SCHEMA.COLUMNS 
-						WHERE table_schema = '${schema}' AND table_name = '${table}'`;
+						WHERE table_schema = '${schema}' AND table_name = '${id}'`;
 		pool.query(query).then(result => {
 			var geom_column = '';
 			var fields = result.rows.filter(row => {
@@ -211,14 +217,15 @@ function makeConfig(table) {
 				return row.column_name;
 			});
 			if (geom_column) {
-				pool.query(`SELECT Find_SRID('${schema}', '${table}', '${geom_column}') srid, 
+				pool.query(`SELECT Find_SRID('${schema}', '${id}', '${geom_column}') srid, 
 							GeometryType(${geom_column}) geom_type 
-							FROM ${schema}."${table}" LIMIT 1`).then(result => {
+							FROM ${schema}."${id}" LIMIT 1`).then(result => {
 					var srid = result.rows[0].srid;
 					var geom_type = result.rows[0].geom_type;
 					var source_config = {
+						"name": name,
 						"database": g_config.uploads.database,
-						"table": `${schema}."${table}"`,
+						"table": `${schema}."${id}"`,
 						"geometry": geom_column,
 						"type": geom_type,
 						"srid": srid,
@@ -228,40 +235,22 @@ function makeConfig(table) {
 					};
 					var json = JSON.stringify(source_config, null, '\t');
 					
-					fs.writeFile(g_sourcedir + table + '.json', json, err => {
+					fs.writeFile(g_sourcedir + id + '.json', json, err => {
 						if (err) {
-							reject('Error writing source file for id: ' + table);
+							reject('Error writing source file for id: ' + id);
 						} else {
-							g_sources[table] = source_config;
-							resolve('Successfully uploaded json with id: ' + table);
+							g_sources[id] = source_config;
+							resolve(id);
 						}
 					});
+				}).catch(reason => {
+					reject('Error executing database query: ' + reason.message);
 				});
 			} else {
-				resolve('Unable to find geometry column');
+				reject('Unable to find geometry column');
 			}
 		}).catch(reason => {
 			reject('Error executing database query: ' + reason.message);
-		});
-	});
-}
-
-function makeStyle(id){
-	return new Promise(function(resolve, reject) {
-		var source = g_sources[id];
-		var pool = g_dbpools[source.database];
-		var query = `WITH extent AS (
-						SELECT ST_Transform(ST_SetSRID(ST_Extent(wkb_geometry), 28992), 4326) geom FROM ${source.table}
-					)
-					SELECT ST_XMin(geom) xmin, ST_YMin(geom) ymin, ST_XMax(geom) xmax, ST_XMax(geom) ymax FROM extent`;
-		pool.query(query).then(result => {
-			var row = result.rows[0];
-			var xrange = row.xmax - row.xmin;
-			var yrange = row.ymax - row.ymin;
-			var center = [row.xmin + xrange / 2, row.ymin + yrange / 2];
-			var zoom = Math.min(1-Math.log2(xrange/360), 1-Math.log2(yrange/180)) + 1;
-			
-			
 		});
 	});
 }
@@ -278,9 +267,8 @@ app.post('/upload', upload.single('file'), function (req, res, next) {
 			.then(loadGeoJson)
 			.then(makeConfig)
 			.then( result => {
-				console.log(result);
-				res.status(200)
-					.send(result);
+				console.log('Uploaded file with id ' + result);
+				res.redirect('/html/maputnik/?style=' + req.headers.origin + '/style/' + result + '.json');
 				cleanup(req.file.path);
 			})
 			.catch( reason => {
@@ -296,19 +284,90 @@ app.post('/upload', upload.single('file'), function (req, res, next) {
 	}
 });
 
-
-/*app.get('/upload.html', function(req, res) {
-	fs.readFile(__dirname + '/upload.html', function (err, html) {
-		if (err) {
-			res.status(500);
-			res.send('Error loading upload page');
-		} else {
-			res.status(200);
-			res.header('Content-Type', 'text/html');
-			res.send(html);
+function makeStyle(id){
+	return new Promise(function(resolve, reject) {
+		if (!id.match(/^\w+$/)){
+			reject({ code: 400, message: 'Invalid style id' });
+			return;
 		}
-	});	
-});*/
+		if (!g_sources.hasOwnProperty(id)) {
+			reject({ code: 404, message: 'Unknown style: ' + id });
+			return;
+		}
+		var source = g_sources[id];
+		var pool = g_dbpools[source.database];
+		var query = `WITH extent AS (
+						SELECT ST_Transform(ST_SetSRID(ST_Extent(wkb_geometry), 28992), 4326) geom FROM ${source.table}
+					)
+					SELECT ST_XMin(geom) xmin, ST_YMin(geom) ymin, ST_XMax(geom) xmax, ST_YMax(geom) ymax FROM extent`;
+		pool.query(query).then(result => {
+			var row = result.rows[0];
+			var xrange = row.xmax - row.xmin;
+			var yrange = row.ymax - row.ymin;
+			
+			var style = JSON.parse(JSON.stringify(g_styletemplate)); // deep clone
+			style.center = [row.xmin + (xrange / 2), row.ymin + (yrange / 2)];
+			style.zoom = Math.min(-Math.log2(xrange/360), -Math.log2(yrange/180)) + 1;
+			style.sources[id] = {
+				"type": "vector",
+				"tiles": [
+					g_config.server_url + '/mvt/' + id + "/{z}/{x}/{y}.mvt"
+				],
+				"minZoom": 0,
+				"maxZoom": 22
+			};
+
+			// find unique layer id
+			var layerid = source.name;
+			var layerids = style.layers.map(layer => {return layer.id;});
+			var i = 1;
+			while(layerids.indexOf(layerid) != -1) {
+				layerid = source.name + "-" + i;
+				i++;
+			}
+
+			var layerconfig = {
+				"id" : layerid,
+				"source" : id,
+				"source-layer" : id,
+				"layout" : { "visibility" : "visible" }
+			};
+			if (source.type == 'POINT') {
+				layerconfig.type = "circle";
+				layerconfig.paint = {
+					"circle-color" : "rgba(240, 0, 0, 1)",
+					"circle-opacity" : 0.7,
+					"circle-radius" : { "stops" : [[6, 2], [17, 10]] }
+				};
+			} else if (source.type == 'POLYGON' || source.type == 'MULTIPOLYGON') {
+				layerconfig.type = "fill";
+				layerconfig.paint = {
+					"fill-color" : "rgba(103, 184, 255, 0.5)",
+					"fill-outline-color" : "rgba(66, 147, 189, 1)"
+				};
+			}
+			style.layers.push(layerconfig);
+			var result = JSON.stringify(style, null, '\t');
+			resolve(result);
+		}).catch(reason => {
+			reject({ code: 500, message: 'Error executing database query: ' + reason.message });
+		});
+	});
+}
+
+app.get('/style/:id.json', function(req, res) {
+	var id = req.params.id;
+	
+	makeStyle(id).then(result => {
+		res.status(200);
+		res.header('Content-Type', 'application/json');
+		res.send(result);
+	}).catch(error => {
+		console.log('Error generating style: ' + error.message);
+		res.status(error.code);
+		res.send('Error generating style: ' + error.message);
+	});
+});
 
 app.listen(g_config.port);
 console.log('mvt server is listening on port ' + g_config.port);
