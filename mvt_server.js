@@ -43,22 +43,28 @@ fs.readdirSync(g_sourcedir).forEach(file => {
 
 function JsonObject(attributes)
 {
-    if (!attributes) {
-        return '';
-    }
-    var fieldlist = attributes.split(',');
-    var result = fieldlist.map(function(field){
-        field = field.replace(' AS ', ' as ');
-        field = field.split(' as ');
-        if (field.length == 2) {
-            return "'" + field[1].trim() + "'," + field[0].trim();
-        } else {
-            return "'" + field[0].trim() + "'," + field[0].trim();
-        }
-    });
-    var result = ", json_build_object(" + result.join(",") + ")::jsonb JSONB";
-    //console.log (result);
-    return result;
+	if (!attributes) {
+		return '';
+	}
+	var fieldlist = attributes.split(',');
+	var result = fieldlist.map(function(field){
+		field = field.replace(' AS ', ' as ');
+		field = field.split(' as ');
+		if (field.length == 2) {
+			return "'" + field[1].trim() + "'," + field[0].trim();
+		} else {
+			return "'" + field[0].trim() + "'," + field[0].trim();
+		}
+	});
+	var result = ", json_build_object(" + result.join(",") + ")::jsonb JSONB";
+	//console.log (result);
+	return result;
+}
+
+function make_extent(z, x, y) { // converts tile z, x, and y to PostGIS extent in EPSG:3857 (web mercator)
+	var max = 20037508.34;
+	var res = (max*2)/Math.pow(2,z);
+	return `ST_MakeEnvelope(${-max + (x * res)}, ${max - (y * res)}, ${-max + (x * res) + res}, ${max - (y * res) - res}, 3857)`;
 }
 
 app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
@@ -90,13 +96,14 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 		var attributes = JsonObject(attributes);
 		var join = source.join ? source.join : '';
 		var groupby = source.groupby ? source.groupby : '';
-		
+
+		var extent = make_extent(z, x, y);
 		var query_text = `
 		SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
-			SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), TileBBox(${z}, ${x}, ${y}, 3857), 4096, 10, true) geom ${attributes}
+			SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), ${extent}, 4096, 10, true) geom ${attributes}
 			FROM ${source.table}
 			${join}
-			WHERE ST_Intersects(TileBBox(${z}, ${x}, ${y}, ${source.srid}), ${source.table}.${source.geometry})
+			WHERE ST_Intersects(ST_Transform(${extent}, ${source.srid}), ${source.table}.${source.geometry})
 			${groupby}
 		) AS q where q.geom is not null
 		`;
@@ -140,11 +147,11 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 });
 
 var allowCORS = function(req, res, next) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-//    res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
-//    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+	res.setHeader('Access-Control-Allow-Origin', '*');
+//	res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+//	res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    next();
+	next();
 }
 app.use(allowCORS);
 app.use('/html', express.static(__dirname + '/html'));
