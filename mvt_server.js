@@ -41,6 +41,26 @@ fs.readdirSync(g_sourcedir).forEach(file => {
 	}
 });
 
+function JsonObject(attributes)
+{
+    if (!attributes) {
+        return '';
+    }
+    var fieldlist = attributes.split(',');
+    var result = fieldlist.map(function(field){
+        field = field.replace(' AS ', ' as ');
+        field = field.split(' as ');
+        if (field.length == 2) {
+            return "'" + field[1].trim() + "'," + field[0].trim();
+        } else {
+            return "'" + field[0].trim() + "'," + field[0].trim();
+        }
+    });
+    var result = ", json_build_object(" + result.join(",") + ")::jsonb JSONB";
+    //console.log (result);
+    return result;
+}
+
 app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 	var x = parseInt(req.params.x);
 	var y = parseInt(req.params.y);
@@ -67,7 +87,7 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 		var source = g_sources[layer];
 		var pool = g_dbpools[source.database];
 		
-		var attributes = source.attributes ? ', ' + source.attributes : '';
+		var attributes = JsonObject(attributes);
 		var join = source.join ? source.join : '';
 		var groupby = source.groupby ? source.groupby : '';
 		
