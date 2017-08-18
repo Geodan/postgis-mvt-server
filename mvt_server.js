@@ -96,6 +96,7 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 		var attributes = JsonObject(source.attributes);
 		var join = source.join ? source.join : '';
 		var groupby = source.groupby ? source.groupby : '';
+		var where = source.where ? ' and (' + source.where + ')' : '';
 
 		var extent = make_extent(z, x, y);
 		var query_text = `
@@ -103,7 +104,8 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 			SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), ${extent}, 4096, 10, true) geom ${attributes}
 			FROM ${source.table}
 			${join}
-			WHERE ST_Intersects(ST_Transform(${extent}, ${source.srid}), ${source.table}.${source.geometry})
+			WHERE ST_Intersects(ST_Transform(${extent}, ${source.srid}), ${source.table}.${source.geometry}) 
+			${where}
 			${groupby}
 		) AS q where q.geom is not null
 		`;

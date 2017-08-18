@@ -7,5 +7,6 @@
 	"srid": 4326,
 	"minzoom": 6,
 	"maxzoom": 13,
-	"attributes": "<column1> as [Alias1], <column1> as [Alias2]"
+	"attributes": "<column1> as [Alias1], <column1> as [Alias2]",
+	"where": "column1 is not null and (column2 = 'value' or column3 = 5)"
 }
