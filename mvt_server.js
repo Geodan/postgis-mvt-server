@@ -100,7 +100,7 @@ app.get('/mvt/:layers/:z/:x/:y.mvt', function(req, res) {
 
 		var extent = make_extent(z, x, y);
 		var query_text = `
-		SELECT ST_AsMVT('${layer}', 4096, 'geom', q) AS mvt FROM (
+		SELECT ST_AsMVT(q, '${layer}', 4096, 'geom') AS mvt FROM (
 			SELECT ST_AsMVTGeom(ST_Transform(${source.table}.${source.geometry}, 3857), ${extent}, 4096, 10, true) geom ${attributes}
 			FROM ${source.table}
 			${join}
